@@ -427,16 +427,21 @@ extend(DocumentCollection.prototype, {
         else callback(null, fullDocument ? res : res.body);
       }
     });
-    this._connection.drainQueue();
     return promise;
   },
   save(data, cb) {
     var {promise, callback} = this._promisify(cb);
-    this._api.post('document/', data, {
-      collection: this.name
-    }, function (err, res) {
-      if (err) callback(err);
-      else callback(null, res.body);
+    var fullDocument = this._fullDocument;
+    this._connection.addQueue({
+      method: 2,
+      action: this._api,
+      path: 'document/',
+      data: data,
+      collection: { collection: this.name },
+      callback: function (err, res) {
+        if (err) callback(err);
+        else callback(null, fullDocument ? res : res.body);
+      }
     });
     return promise;
   }

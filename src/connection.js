@@ -170,6 +170,16 @@ extend(Connection.prototype, {
           self.drainQueue();
         });
       }
+      else if (action.method === 2) {
+        var self = this;
+
+        action.action.post(action.path, action.data,
+			   action.collection, function (err, res) {
+          self._currentTasks--;
+          action.callback(err, res);
+          self.drainQueue();
+        });
+      }
     }
   }
 });
