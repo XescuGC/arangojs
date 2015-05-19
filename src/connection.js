@@ -38,6 +38,7 @@ function Connection(config) {
   this._maxTasks = ((config.agent === undefined)
     ? 5
     : config.agent.maxSockets) * 20;
+  this._maxTasks = 10;
 }
 
 Connection.defaults = {
@@ -101,10 +102,7 @@ extend(Connection.prototype, {
       } else {
         body = String(body);
       }
-      if (typeof body === "string") {
-	body = new Buffer(body, "utf-8");
-      }
-      headers['content-length'] = body.length;
+      headers['content-length'] = Buffer.byteLength(body, "utf-8");
     }
 
     if (isDocument) {
