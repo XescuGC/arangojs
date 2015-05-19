@@ -37,8 +37,7 @@ function Connection(config) {
   this._currentTasks = 0;
   this._maxTasks = ((config.agent === undefined)
     ? 5
-    : config.agent.maxSockets) * 20;
-  this._maxTasks = 10;
+    : config.agent.maxSockets);
 }
 
 Connection.defaults = {
