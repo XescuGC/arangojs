@@ -36,11 +36,44 @@ export default class ArrayCursor {
     }
   }
 
+  _loop(index, fn, callback, initialResult, { breakFn = (result) => false, transformResultFn = (result) => result, resultType = 'equal'}) {
+    try {
+      let result = initialResult;
+      while (this._result.length) {
+        switch (resultType) {
+        case 'equal':
+          result = fn(this._result.shift(), index, this);
+          break;
+        case 'push':
+          result.push(fn(this._result.shift(), index, this));
+          break;
+        case 'reduce':
+          result = fn(result, this._result.shift(), index, this);
+          break;
+        }
+        index++;
+        if (breakFn(result)) break;
+      }
+      if (!this._hasMore || breakFn(result)) callback(null, transformResultFn(result));
+      else {
+        this._more(err => err ? callback(err) : this._loop(index, fn, callback, initialResult, breakFn));
+      }
+    } catch (e) {
+      callback(e);
+    }
+  }
+
   all(cb) {
     const {promise, callback} = this._connection.promisify(cb);
     this._drain(err => {
       if (err) callback(err);
-      else callback(null, this._result);
+      else {
+        let result = [];
+        while (this._result.length) {
+          result.push(this._result.shift());
+        }
+        callback(null, result);
+      }
     });
     return promise;
   }
@@ -68,69 +101,23 @@ export default class ArrayCursor {
   each(fn, cb) {
     const {promise, callback} = this._connection.promisify(cb);
     let index = 0;
-    const loop = () => {
-      try {
-        let result;
-        while (this._result.length) {
-          result = fn(this._result.shift(), index, this);
-          index++;
-          if (result === false) break;
-        }
-        if (!this._hasMore || result === false) callback(null, result);
-        else {
-          this._more(err => err ? callback(err) : loop());
-        }
-      } catch (e) {
-        callback(e);
-      }
-    };
-    loop();
+    this._loop(index, fn, callback, undefined, { breakFn: (result) => result === false });
     return promise;
   }
 
   every(fn, cb) {
     const {promise, callback} = this._connection.promisify(cb);
     let index = 0;
-    const loop = () => {
-      try {
-        let result = true;
-        while (this._result.length) {
-          result = fn(this._result.shift(), index, this);
-          index++;
-          if (!result) break;
-        }
-        if (!this._hasMore || !result) callback(null, Boolean(result));
-        else {
-          this._more(err => err ? callback(err) : loop());
-        }
-      } catch (e) {
-        callback(e);
-      }
-    };
-    loop();
+    let result = true;
+    this._loop(index, fn, callback, result, { breakFn: (result) => !result, transformResultFn: (result) => Boolean(result) });
     return promise;
   }
 
   some(fn, cb) {
     const {promise, callback} = this._connection.promisify(cb);
     let index = 0;
-    const loop = () => {
-      try {
-        let result = false;
-        while (this._result.length) {
-          result = fn(this._result.shift(), index, this);
-          index++;
-          if (result) break;
-        }
-        if (!this._hasMore || result) callback(null, Boolean(result));
-        else {
-          this._more(err => err ? callback(err) : loop());
-        }
-      } catch (e) {
-        callback(e);
-      }
-    };
-    loop();
+    let result = false;
+    this._loop(index, fn, callback, result, { breakFn: (result) => result, transformResultFn: (result) => Boolean(result) });
     return promise;
   }
 
@@ -138,21 +125,7 @@ export default class ArrayCursor {
     const {promise, callback} = this._connection.promisify(cb);
     let index = 0;
     const result = [];
-    const loop = () => {
-      try {
-        while (this._result.length) {
-          result.push(fn(this._result.shift(), index, this));
-          index++;
-        }
-        if (!this._hasMore) callback(null, result);
-        else {
-          this._more(err => err ? callback(err) : loop());
-        }
-      } catch (e) {
-        callback(e);
-      }
-    };
-    loop();
+    this._loop(index, fn, callback, result, {resultType: 'push'});
     return promise;
   }
 
@@ -163,33 +136,19 @@ export default class ArrayCursor {
     }
     let index = 0;
     const {promise, callback} = this._connection.promisify(cb);
-    const loop = () => {
-      try {
-        while (this._result.length) {
-          accu = fn(accu, this._result.shift(), index, this);
-          index++;
-        }
-        if (!this._hasMore) callback(null, accu);
-        else {
-          this._more(err => err ? callback(err) : loop());
-        }
-      } catch (e) {
-        callback(e);
-      }
-    };
     if (accu !== undefined) {
-      loop();
+      this._loop(index, fn, callback, accu, {resultType: 'reduce'});
     } else if (this._result.length > 1) {
       accu = this._result.shift();
       index = 1;
-      loop();
+      this._loop(index, fn, callback, accu, {resultType: 'reduce'});
     } else {
       this._more(err => {
         if (err) callback(err);
         else {
           accu = this._result.shift();
           index = 1;
-          loop();
+          this._loop(index, fn, callback, accu, {resultType: 'reduce'});
         }
       });
     }
